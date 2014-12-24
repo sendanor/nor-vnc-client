@@ -1,6 +1,6 @@
 {
   "name": "nor-vnc-client",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Send keystrokes to VNC server using CLI",
   "main": "index.js",
   "bin": {
@@ -20,8 +20,8 @@
   },
   "homepage": "https://github.com/sendanor/nor-vnc-client",
   "dependencies": {
-    "nor-debug" : ">= 0.1.46 < 0.2.0",
-    "nor-is"    : ">= 0.1.15 < 0.2.0",
+    "nor-debug" : ">= 0.1.47 < 0.2.0",
+    "nor-is"    : ">= 0.1.16 < 0.2.0",
     "minimist"  : ">= 0.1.0  < 0.2.0",
     "rfb"       : ">= 0.2.3  < 0.3.0",
     "q"         : ">= 1.0.1  < 1.1.0"
