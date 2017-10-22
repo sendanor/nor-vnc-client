@@ -3,19 +3,23 @@ try {
 	var Q = require('q');
 	var debug = require('nor-debug');
 	var is = require('nor-is');
-	var RFB = require('rfb');
+	var RFB = require('rfb2');
 	
 	var argv = require('minimist')(process.argv.slice(2));
 	var host = argv.host || 'localhost';
 	var port = argv.port || 5900;
 	var password = argv.password;
 
-	argv.keys = argv.keys.split(/[,;]/) || [];
+	var keyDown = 1;
+	var keyUp = 0;
+
+	argv.keys = argv.keys ? argv.keys.split(/[,;]/) || [] : [];
 
 	debug.assert(host).is('string');
 	debug.assert(port).is('number');
 	debug.assert(password).is('string');
 	debug.assert(argv.keys).is('array');
+	debug.assert(argv._).ignore(undefined).is('array');
 
 	/** Delay a moment */
 	function delay(ms, ret) {
@@ -79,40 +83,37 @@ try {
 		case 'alt_left'      : return 0xffe9;
 		case 'alt_right'     : return 0xffea;
 		case 'alt_gr'        : return 0xffea;
-		default              : throw new TypeError('Unknown key: '+key);
+		default              :
+			if (is.string(key) && (key.length === 1)) {
+				return key.charCodeAt(0);
+			}
+			throw new TypeError('Unknown key: '+key);
 		};
 	}
 
-	/** Open RFB session */	
+	/** Open RFB session
+	 *
+	 * @param opts
+	 */
 	function open_rfb(opts) {
-		var r = new RFB(opts);
-		r.on('error', function(err) {
-			debug.error(err);
+		return Q.Promise( (resolve, reject) => {
+			var r = RFB.createConnection(opts);
+			r.on('error', function(err) {
+				reject(err);
+			});
+			r.on('connect', function() {
+				resolve(r);
+			});
 		});
-		return delay(250, r);
-	}
-
-	/** */
-	function requestRedraw(r) {
-		return Q( r.requestRedraw() );
-	}
-
-	/** */
-	function dimensions(r) {
-		var defer = Q.defer();
-		r.dimensions(function (dims) {
-			setTimeout(function () {
-				defer.resolve(dims);
-			}, 250);
-		});
-		return defer.promise;
 	}
 
 	/** */
 	function send_key(r, k) {
-		r.sendKeyDown( k );
-		r.sendKeyUp( k );
-		return delay(50);
+		r.keyEvent(k, keyDown);
+		return delay(25).then(function() {
+			r.keyEvent(k, keyUp);
+			return delay(25);
+		});
 	}
 
 	/* Test code */	
@@ -120,23 +121,43 @@ try {
 		'shared': true,
 		'host': host,
 		'port': port,
-		'password': password,
-		'securityType': 'vnc'
+		'password': password
 	}).then(function(r) {
-		return requestRedraw(r).then(function() {
-			return dimensions(r).then(function(dims) {
-				return argv.keys.map(function(key) {
+		return Q.fcall(function() {
+			if (argv.keys && argv.keys.length) {
+				return argv.keys.map(function ( key ) {
 					return get_keycode(key);
-				}).map(function(key) {
-					return function do_send_key() {
-						return send_key( r, key );
+				}).map(function ( key ) {
+					return function do_send_key () {
+						return send_key(r, key);
 					};
 				}).reduce(Q.when, Q());
-			});
+			}
+		}).then(function() {
+			if (argv._ && argv._.length) {
+				return argv._.map(function (keys) {
+
+					if (keys.substr(0, 1) === '/') {
+						if (keys.substr(0, 2) === '//') {
+							return keys.substr(0, 1).split("");
+						}
+						return keys.substr(1).split(/[,;]/);
+					}
+
+					return keys.split("");
+				}).reduce(function (a, b) {
+					return a.concat(b);
+				}, []).map(function(key) {
+					return get_keycode(key);
+				}).map(function (key) {
+					return function do_send_key () {
+						return send_key(r, key);
+					};
+				}).reduce(Q.when, Q());
+			}
 		}).fin(function() {
 			return r.end();
 		});
-		
 	}).fail(function(err) {
 		console.log('ERROR: '+ err);
 	}).done();
